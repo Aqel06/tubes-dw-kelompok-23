@@ -252,3 +252,25 @@ Desain konseptual multidimensi yang telah dirancang memiliki tingkat kesesuaian 
 | **Dim_Tim**                  | Team.csv      | team_long_name, formation, coach_name | Informasi mengenai klub dan formasi tim yang mendukung analisis berbasis tim. |
 | **Dim_Waktu**                | Match.csv     | date, season                  | Informasi mengenai tanggal dan musim untuk analisis tren historis. |
 | **Dim_Liga**                 | League.csv    | league_name, country_id       | Nama liga dan negara untuk segmentasi kompetisi. |
+
+## Misi 4 - Implementasi, Reporting, dan Produksi
+
+### 1. Pendahuluan
+
+#### 1.1 Latar Belakang
+
+Di era digitalisasi olahraga modern, data menjadi aset penting bagi klub sepak bola dalam pengambilan keputusan taktis dan strategis. Namun, data tersebar dalam berbagai format dan sumber seperti database SQLite, file CSV, dan Excel. Ketidakterpaduan tersebut dapat menyulitkan analisis yang menyeluruh terhadap performa pemain, baik pola permainan lawan hingga manajemen operasional tim. Untuk mengatasi hal tersebut, diperlukannya mengintegrasikan data secara efisien dan dibutuhkan sistem Data Warehouse (DW) yang mampu menyimpan, memproses, dan menyajikan data secara terstruktur. Proyek ini bertujuan membangun gudang data bertema sepak bola “Taktika: Where Data Meets Strategy” sebagai platform utama untuk analitik sepak bola.
+
+#### 1.2 Tujuan
+
+1. Membangun gudang data berbasis SQL Server.
+2. Menerapkan proses ETL untuk memindahkan data mentah ke dalam Data Warehouse.
+3. Menyediakan query analitik OLAP berbasis SQL.
+4. Menyusun dokumentasi proyek dan struktur repositori Github.
+
+#### 1.2 Ruang Lingkup
+
+1. Tabel fakta berisi performa pertandingan.
+2. Tabel dimensi mencakup waktu, pemain, tim, lokasi, formasi dan kompetisi.
+3. Proses transformasi data dari SQLite atau CSV ke bentuk yang lebih terstruktur.
+4. Penerapan indexing, partisi, dan views untuk optimasi performa query.
