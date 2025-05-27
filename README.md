@@ -104,6 +104,8 @@
    
 2. Kimball, Ralph. *The Data Warehouse Toolkit*
 
+---
+
 ## Misi 2 - Dokumentasi Desain
 ### 1. Ringkasan Kebutuhan dari Misi
 
@@ -253,6 +255,8 @@ Skema ini dapat menjawab kebutuhan seperti:
 | **Dim_Waktu**                | Match.csv     | date, season                  | Informasi mengenai tanggal dan musim untuk analisis tren historis. |
 | **Dim_Liga**                 | League.csv    | league_name, country_id       | Nama liga dan negara untuk segmentasi kompetisi. |
 
+---
+
 ## Misi 4 - Implementasi, Reporting, dan Produksi
 
 ### 1. Pendahuluan
@@ -333,3 +337,157 @@ CREATE TABLE dim_tim (
 );
 ```
 <p align="justify"> Pembuatan tabel dim_waktu berfungsi untuk mencatat referensi waktu pada setiap peristiwa pertandingan dalam tabel fakta. Tabel dim_waktu memungkinkan untuk melakukan analisis performa tim atau pemain seperti tren bulanan dan tahunan berdasarkan periode waktu tertentu. Sedangkan tabel dim_tim berfungsi untuk menyimpan informasi deskriptif mengenai tim yang bertanding. Tabel dim_tim dapat memungkinkan pengguna melakukan analisis untuk melihat performa tim berdasarkan klub dan pelatih.
+
+#### 4.3 Script Pembuatan Tabel Fakta
+```
+CREATE TABLE fakta_performa_pertandingan (
+  id_fakta INT PRIMARY KEY,
+  id_dim_tim INT,
+  id_dim_pemain INT,
+  id_dim_waktu INT,
+  jumlah_gol INT,
+  jumlah_assist INT,
+  FOREIGN KEY (id_dim_tim) REFERENCES dim_tim(id_dim_tim),
+  FOREIGN KEY (id_dim_pemain) REFERENCES dim_pemain(id_dim_pemain),
+  FOREIGN KEY (id_dim_waktu) REFERENCES dim_waktu(id_dim_waktu)
+);
+
+```
+<p align="justify"> Tabel fakta_performa_pertandingan menyimpan data kuantitatif yang dapat digunakan untuk mempresentasikan para performa pemain individu dalam suatu pertandingan. Dengan direlasikan ke tabel dimensi, dapat dilakukannya analisis multidimensi dengan OLAP seperti tren performa pemain berdasarkan formasi tertentu atau perbandingan antar liga.
+
+#### 4.4 Indexing dan Partisi
+
+Script index waktu pertandingan: 
+```
+CREATE CLUSTERED INDEX idx_match_date
+ON fakta_performa_pertandingan (id_dim_waktu);
+```
+
+<p align="justify"> Indeks  waktu pertandingan dibuat dikarenakan pada rentang waktu tertentu, analisis dan pelaporan dibuat seperti tren performa setiap per bulan ataupun per tahun. Untuk memastikan data disusun berdasarkan urutan waktu, digunakannya clustered index supaya pencarian dan agregasi data per waktu menjadi lebih cepat dan efisien.
+
+<p align="justify"> Partisi dilakukan secara horizontal berdasarkan tahun pertandingan dengan membagi data berdasarkan segmen nilai tahun dan waktu untuk efisiensi manajemen data. Tujuan partisi ini adalah untuk:
+1. Meningkatkan efisiensi pemrosesan data.
+2. Mempermudah pemeliharaan manajemen data historis.
+3. Menghindari data besar dengan beban yang berlebih saat menganalisis data dari beberapa musim pertandingan.
+
+### 5. IMPLEMENTASI GUDANG DATA ( MISI 4 )
+
+#### 5.1 Pembuatan Struktur dan Relasi
+
+1. Semua tabel dibuat menggunakan script create_tables.sql.
+2. Data dummy dari data_dw.sql dimuat melalui insert_data.sql.
+3. Semua foreign key telah dikonfigurasi antar dimensi dan fakta.
+
+
+#### 5.2 Commit ke GitHub
+Struktur file:
+- sql/create_tables.sql
+- sql/insert_data.sql
+- sql/analysis_queries.sql
+- docs/laporan_misi4.pdf
+
+### 6. Proses ETL / ELT
+
+#### 6.1 Ekstraksi
+<p align="justify"> Proses ekstraksi dilakukan dengan menggunakan Python yang terhubung dengan SQLite. Data hasil ekstraksi tersebut disimpan dalam format staging area atau sementara yang kemudian akan diproses pada tahap transformasi. Data pertandingan tersebut diambil dari tabel match dengan secara keseluruhan dengan menggunakan query SQL:
+
+```
+import sqlite3
+conn = sqlite3.connect('database.sqlite')
+cursor = conn.cursor()
+cursor.execute("SELECT * FROM match")
+data = cursor.fetchall()
+```
+  
+#### 6.2 Transformasi
+
+<p align="justify"> Pada tahap transformasi, data mentah diolah supaya sesuai dengan struktur Data Warehouse, yaitu: 
+
+1. Mengubah format tanggal yang sebelumnya bertipe YYYY-MM-DD menjadi integer ID yang merepresentasikan waktu.
+2. Normalisasi data ke tabel dimensi berdasarkan atribut, dengan memastikan data tersebut konsisten dan tidak ada duplikasi.
+3. Validasi data untuk menjaga kualitas data supaya tidak ada nilai null ketika melakukan mapping formasi para pemain.
+
+#### 6.3 Load ke Warehouse
+<p align="justify"> Setelah melakukan transformasi data, dilakukannya proses loading dengan insert data ke dalam tabel fakta dan tabel dimensi Data Warehouse untuk memastikan data tersebut sudah siap untuk dilakukannya analisis OLAP. Berikut contoh query untuk load data ke Warehouse:
+
+```
+INSERT INTO fakta_performa_pertandingan
+SELECT ... FROM staging_match;
+```
+
+### 7. Query OLAP Dan Analitik
+
+#### 7.1 Total Gol per Tim
+<p align="justify"> Berikut query untuk menampilkan akumulasi gol oleh setiap tim. Hasil query tersebut dapat dilakukannya analisis untuk memahami tim mana yang memiliki kekuatan serangan terbaik.
+  
+```
+SELECT dt.nama_tim, SUM(fp.jumlah_gol) AS total_gol
+FROM fakta_performa_pertandingan fp
+JOIN dim_tim dt ON fp.id_dim_tim = dt.id_dim_tim
+GROUP BY dt.nama_tim;
+```
+
+#### 7.2 Rata-rata Assist Pemain
+<p align="justify"> Untuk menghitung rata-rata kontribusi assist setiap pemain, query ini dapat memberikan insight mengenai kontribusi para pemain dalam proses menciptakan gol.
+
+```  
+SELECT dp.nama_pemain, AVG(fp.jumlah_assist) AS rata_assist
+FROM fakta_performa_pertandingan fp
+JOIN dim_pemain dp ON fp.id_dim_pemain = dp.id_dim_pemain
+GROUP BY dp.nama_pemain;
+```
+
+#### 7.3 Total Gol per Tahun
+<p align="justify"> Analisis tren jumlah gol dari tahun ke tahun dilakukan untuk melihat performa secara temporal dari tim dan pemain. Untuk membantu mengidentifikasi periode peningkatan performa atau musim terbaik, dapat digunakan query berikut:
+
+```
+SELECT dw.tahun, SUM(fp.jumlah_gol) AS total_gol
+FROM fakta_performa_pertandingan fp
+JOIN dim_waktu dw ON fp.id_dim_waktu = dw.id_dim_waktu
+GROUP BY dw.tahun;
+```
+
+### 8. Hasil Implementasi Dan Evaluasi
+
+### 8.1 Hasil Implementasi
+
+1. Semua komponen termasuk tabel fakta, tabel dimensi, indeks dan partisi berhasil dibuat dan diuji sesuai rancangan.
+2. Data dummy mempermudah pengujian performa query dan validasi struktur data secara efektif.
+3. Struktur skema bintang (star schema) dan integritas relasi antar tabel sudah terimplementasi dengan baik sesuai standar Data Warehouse dan mendukung proses analitik OLAP.
+
+
+### 8.2 Evaluasi
+
+**Keberhasilan**:
+1. Struktur skema bintang (star schema) berjalan baik, terbukti mendukung dalam melakukan analisis multidimensi secara efisien.
+2. Penerapan indexing dan partisi memberikan peningkatan yang signifikan pada kecepatan dalam eksekusi query OLAP, khususnya pada analisis berbasis waktu 
+
+
+**Kendala dan tantangan**:
+1. Data dummy yang digunakan belum sepenuhnya mewakili skenario riil kompetisi, sehingga analisis bersifat terbatas.
+2. Transformasi awal dari SQLite memerlukan pembersihan dan normalisasi secara manual, sehingga memakan waktu yang cukup banyak.
+
+### 9. Penutup Dan Pengembangan Lanjutan
+
+#### 9.1 Pengembangan Ke Depan
+
+1. Mengembangkan visualisasi interaktif di Power BI berdasarkan query OLAP, untuk mendukung eksplorasi data.
+2. Integrasi data live dari API sepak bola resmi, supaya Data Warehouse selalu terupdate dan selalu relevan pada kondisi pertandingan yang terkini.
+3. Otomatisasi pipeline ETL dengan tools seperti Microsoft SSIS atau Apache Airflow untuk peningkatan efisiensi dan mengurangi kesalah manual.
+
+
+#### 9.2 Kesimpulan
+<p align="justify"> Proyek ini berhasil menunjukkan bahwa sistem Data Warehouse bertema sepak bola dengan skema bintang, yang didukung dengan proses ETL dan indexing yang tepat mampu meningkatkan performa query OLAP. Sistem yang dibuat mampu menyediakan insight penting dalam domain sepak bola, seperti pengambilan keputusan dan strategi dalam dunia sepak bola.
+
+### LAMPIRAN TIM PROYEK
+
+- **Nama Tim**: DWFC (Data Warehouse Football Club)
+- **Anggota**:
+  - Muhammad Kaisar Firdaus
+  - Haikal Dwi Syaputra
+  - Aditya Rahman
+  - Khaalishah Zuhrah A. V.
+  - Rafa Aqilla Jungjunan
+- **Ketua Proyek**: Muhammad Kaisar Firdaus
+
+
